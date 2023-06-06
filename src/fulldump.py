@@ -3,6 +3,7 @@
 # @only_if_gdb_running, @parse_arguments,
 # GenericCommand, register_external_command
 # warn, ok
+import json
 import pickle
 
 
@@ -11,15 +12,15 @@ class FulldumpCommand(GenericCommand):
     """Dump memory and registers of the current execution."""
 
     _cmdline_ = "fulldump"
-    _syntax_ = f"{_cmdline_} [FILENAME]"
-    _example_ = f"{_cmdline_} keygen.dump"
+    _syntax_ = f"{_cmdline_} [FILENAME] [--json]"
+    _example_ = f"{_cmdline_} keygen.json --json"
 
     def __init__(self) -> None:
         super().__init__(prefix=False, complete=gdb.COMPLETE_LOCATION)
         return
 
     @only_if_gdb_running
-    @parse_arguments({"filename": "fulldump.dump"}, {})
+    @parse_arguments({"filename": "fulldump.dump"}, {"--json": True})
     def do_invoke(self, _: list[str], **kwargs) -> None:
         args = kwargs["arguments"]
 
@@ -28,6 +29,9 @@ class FulldumpCommand(GenericCommand):
             size = sect.page_end - sect.page_start
             try:
                 raw = gef.memory.read(sect.page_start, size)
+                if args.json:
+                    raw = raw.hex()
+
                 memory.append(
                     {
                         "start": sect.page_start,
@@ -60,10 +64,14 @@ class FulldumpCommand(GenericCommand):
                 xmm = int(xmm.split()[2], 16)
                 regs[f"xmm{i}"] = xmm
 
-        dump = (regs, memory)
+        dump = {"CPU": regs, "memory": memory}
 
-        with open(args.filename, "wb") as fd:
-            pickle.dump(dump, fd)
+        if args.json:
+            with open(args.filename, "w") as fd:
+                json.dump(dump, fd)
+        else:
+            with open(args.filename, "wb") as fd:
+                pickle.dump(dump, fd)
 
         ok(f"Full dump saved into {args.filename}")
 
